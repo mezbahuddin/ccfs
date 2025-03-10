@@ -148,7 +148,7 @@ if api_key:
                     try:
                         location_to_net = train.groupby(var_groupby)[outcome_var].mean().to_dict()
                         location_to_invest = {location: net for location, net in location_to_net.items() if net > 0}
-                        
+                        st.write(f"{var_groupby} to invest in based on historical data: {list(location_to_invest.keys())}")
                         # Handle case where no locations meet criteria
                         if not location_to_invest:
                             st.warning("No locations meet investment criteria.")
@@ -169,10 +169,10 @@ if api_key:
                         colors = ['green' if value >= 0 else 'red' for value in location_donation]
                         
                         sns.barplot(data=location_policy, x=var_groupby, y=outcome_var, estimator=sum, ci=None, palette=colors)
-                        plt.title("Location Policy Applied to Test (Unseen) Data")
+                        plt.title(f"{var_groupby} Policy when Applied to Test (Unseen) Data")
                         plt.xticks(rotation=45)
                         image3 = st.pyplot(plt)
-                        
+                        st.write(f"Potential positive value {var_groupby}s: {location_donation[location_donation > 0].index.tolist()}")
                         # --------- Visualization 4: Histogram of Donations ---------
                         plt.figure(figsize=(10,6))
                         sns.histplot(data=location_policy, x=outcome_var)
@@ -301,7 +301,7 @@ if api_key:
                                 'support_size': list(range(1, min(15, len(features)) + 1)),
                                 'ic_type': ['aic', 'bic', 'ebic', 'gic']
                             }
-                            st.info("Abess (Adaptive Best Subset Selection) is available and will be included in model evaluation.")
+                            #st.info("Abess (Adaptive Best Subset Selection) is available and will be included in model evaluation.")
                         except ImportError:
                             st.warning("Abess package is not installed. To include Abess in model evaluation, install it using: pip install abess")
                             
@@ -485,21 +485,26 @@ if api_key:
                             id_column = 'generated_id' #assumes that the index is unique/each row has a unique identifier
                         
                         # Calculate the difference between prediction and actual
-                        positive_donors_df['diff'] = abs(positive_donors_df['prediction'] - positive_donors_df[outcome_var])
-                        positive_donors_df['diff_percent'] = (positive_donors_df['diff'] / positive_donors_df[outcome_var]) * 100
+                        positive_donors_df['diff'] = (positive_donors_df['prediction'] - positive_donors_df[outcome_var])
+                        positive_donors_df['diff_percent'] = abs(positive_donors_df['diff'] / positive_donors_df[outcome_var]) * 100
                         
                         # Filter donors where prediction and actual are close (less than 15% difference)
                         # If actual value is 0, we'll include the donor if the prediction is small (< 0.1)
                         close_prediction_donors = positive_donors_df[
-                            ((positive_donors_df[outcome_var] != 0) & (positive_donors_df['diff_percent'] < 15)) | 
+                            ((positive_donors_df[outcome_var] != 0) & (positive_donors_df['diff_percent'] < 20)) | 
                             ((positive_donors_df[outcome_var] == 0) & (positive_donors_df['prediction'] < 0.1))
                         ].copy()
                         
                         # Create a list of dictionaries with donor info
-                        positive_donors = close_prediction_donors[[id_column, outcome_var, 'prediction', 'diff', 'diff_percent']].to_dict('records')
+                        positive_donors = close_prediction_donors[[id_column
+                                                                   #, outcome_var
+                                                                   , 'prediction'
+                                                                   #, 'diff'
+                                                                   , 'diff_percent'
+                                                                   ]].to_dict('records')
                         
                         # Add a rank based on closeness of prediction (smaller difference is better)
-                        positive_donors_sorted = sorted(positive_donors, key=lambda x: x['diff'])
+                        positive_donors_sorted = sorted(positive_donors, key=lambda x: x['diff_percent'])
                         for rank, donor in enumerate(positive_donors_sorted, 1):
                             donor['rank'] = rank
                         
@@ -556,7 +561,7 @@ if api_key:
                         # Store positive donors in session state
                         if positive_donors:
                             st.session_state.positive_donors = positive_donors
-                            st.success(f"Found {len(positive_donors)} donors with accurate predictions (small difference between prediction and actual {target})")
+                            st.success(f"Found {len(positive_donors)} {ID}s with difference between prediction and actual {target} < 20%")
                             
                             # Show top 10 donors
                             st.subheader("Top 10 Donors with Most Accurate Predictions")
@@ -572,9 +577,9 @@ if api_key:
                                 full_donors_df['diff_percent'] = full_donors_df['diff_percent'].map(lambda x: '{:.2f}'.format(x))
                             csv = full_donors_df.to_csv(index=False).encode('utf-8')
                             st.download_button(
-                                "Download Donors with Accurate Predictions",
+                                f"Download this table as CSV (Please see disclaimer below)",
                                 csv,
-                                "accurate_prediction_donors.csv",
+                                "{id_column}_list_with_predicted_{outcome_var}.csv",
                                 "text/csv",
                                 key='download-csv'
                             )
@@ -583,8 +588,8 @@ if api_key:
                             save_visualizations(i1, i2, i3, i4, i5)
                 
                 # GPT Analysis section
-                st.header("AI Data Analysis")
-                st.info("Ask questions about your data and get AI-powered insights")
+                st.header("Chat Bot")
+                st.info("Ask questions about the data and get AI-powered insights")
                 
                 def generate_analysis(user_query, data):
                     try:

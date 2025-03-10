@@ -17,3 +17,4 @@ matplotlib
 scikit-learn
 abess
 seaborn # for visualization
+watchdog # for file watching
