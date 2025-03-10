@@ -16,4 +16,4 @@ streamlit
 matplotlib
 scikit-learn
 abess
-seaborn
+seaborn # for visualization
