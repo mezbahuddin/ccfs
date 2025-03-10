@@ -16,3 +16,4 @@ streamlit
 matplotlib
 scikit-learn
 abess
+seaborn
