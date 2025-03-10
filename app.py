@@ -210,8 +210,8 @@ if api_key:
                         )
                         
                         # Progress bar for model evaluation
-                        progress_bar = st.progress(0)
-                        st.write("Evaluating different machine learning models with hyperparameter optimization...")
+                        # progress_bar = st.progress(0)
+                        # st.write("Evaluating different machine learning models with hyperparameter optimization...")
                         
                         # Define hyperparameter search spaces for each model
                         param_distributions = {
@@ -317,13 +317,29 @@ if api_key:
                         # Total models to evaluate
                         total_models = len(base_models)
                         
+                        # Initialize a container to hold hyperparameter results
+                        hyperparams_container = st.container()
+                        
+                        # Define a session state for hyperparams if it doesn't exist
+                        if 'hyperparams' not in st.session_state:
+                            st.session_state.hyperparams = {}
+                        
+                        # Create a toggle/checkbox instead of a button
+                        #show_hyperparams = st.checkbox("Show Hyperparameter Optimization Details")
+                        
+                        # Progress bar for model evaluation
+                        progress_bar = st.progress(0)
+                        st.write("Evaluating different machine learning models with hyperparameter optimization...")
+                        
                         # Evaluate each model with hyperparameter tuning
                         for i, (name, model) in enumerate(base_models.items()):
                             try:
                                 # Update progress bar
                                 progress_bar.progress((i) / total_models)
                                 
-                                st.write(f"Optimizing hyperparameters for: {name}")
+                                # Store that we're optimizing this model
+                                if name not in st.session_state.hyperparams:
+                                    st.session_state.hyperparams[name] = {"optimizing": True}
                                 
                                 # Get parameter space for this model
                                 param_space = param_distributions.get(name, {})
@@ -333,7 +349,10 @@ if api_key:
                                     # Just fit and evaluate the model as is
                                     model.fit(X_train, y_train)
                                     best_model = model
-                                    st.write(f"Model {name} has no hyperparameters to tune or uses internal optimization.")
+                                    
+                                    # Store this information
+                                    st.session_state.hyperparams[name]["no_params"] = True
+                                    st.session_state.hyperparams[name]["message"] = f"Model {name} has no hyperparameters to tune or uses internal optimization."
                                 else:
                                     # Use RandomizedSearchCV for hyperparameter optimization
                                     n_actual_iter = min(n_iter, np.prod([len(v) if hasattr(v, '__len__') else 1 
@@ -365,10 +384,9 @@ if api_key:
                                     search.fit(X_train, y_train)
                                     best_model = search.best_estimator_
                                     
-                                    # Display best parameters
-                                    st.write(f"Best parameters for {name}:")
-                                    for param, value in search.best_params_.items():
-                                        st.write(f"- {param}: {value}")
+                                    # Store the best parameters
+                                    st.session_state.hyperparams[name]["has_params"] = True
+                                    st.session_state.hyperparams[name]["best_params"] = search.best_params_
                                 
                                 # Evaluate best model
                                 y_train_pred = best_model.predict(X_train)
@@ -380,6 +398,9 @@ if api_key:
                                 mse = mean_squared_error(y_val, y_val_pred)
                                 mae = mean_absolute_error(y_val, y_val_pred)
                                 
+                                # Display minimal feedback during processing
+                                #st.write(f"Model: {name} - Validation R²: {val_r2:.4f}")
+                                
                                 # Add to results
                                 results.append({
                                     'Model': name,
@@ -390,26 +411,37 @@ if api_key:
                                     'model_object': best_model
                                 })
                                 
-                                st.write(f"Model performance - {name}: Train R²: {train_r2:.4f}, Validation R²: {val_r2:.4f}")
-                                
                             except Exception as e:
                                 st.warning(f"Error tuning {name}: {str(e)}")
                         
                         # Clear progress bar
                         progress_bar.empty()
                         
+                        # Display hyperparameter details if toggle is checked
+                        # if show_hyperparams:
+                        #     with hyperparams_container:
+                        #         st.subheader("Hyperparameter Optimization Details")
+                        #         for name, details in st.session_state.hyperparams.items():
+                        #             with st.expander(f"Details for: {name}"):
+                        #                 if details.get("no_params", False):
+                        #                     st.write(details.get("message", "No hyperparameters to tune"))
+                        #                 elif details.get("has_params", False):
+                        #                     st.write(f"Best parameters for {name}:")
+                        #                     for param, value in details.get("best_params", {}).items():
+                        #                         st.write(f"- {param}: {value}")
+                        
                         # Create DataFrame of results for display
                         results_df = pd.DataFrame([{k: v for k, v in r.items() if k != 'model_object'} for r in results])
                         results_df = results_df.sort_values('Validation R²', ascending=False).reset_index(drop=True)
                         
                         # Display results
-                        st.subheader("Model Comparison Results (After Hyperparameter Optimization)")
-                        st.dataframe(results_df.style.format({
-                            'Train R²': "{:.4f}",
-                            'Validation R²': "{:.4f}",
-                            'MSE': "{:.4f}",
-                            'MAE': "{:.4f}"
-                        }))
+                        # st.subheader("Model Comparison Results (After Hyperparameter Optimization)")
+                        # st.dataframe(results_df.style.format({
+                        #     'Train R²': "{:.4f}",
+                        #     'Validation R²': "{:.4f}",
+                        #     'MSE': "{:.4f}",
+                        #     'MAE': "{:.4f}"
+                        # }))
                         
                         # Get the best model
                         if not results_df.empty:
@@ -417,8 +449,9 @@ if api_key:
                             best_model_name = results_df.loc[best_model_idx, 'Model']
                             best_model = [r['model_object'] for r in results if r['Model'] == best_model_name][0]
                             
-                            st.success(f"Best model after optimization: {best_model_name} with Validation R² = {results_df.loc[best_model_idx, 'Validation R²']:.4f}")
-                            
+                            #st.success(f"Best model after optimization: {best_model_name} with Validation R² = {results_df.loc[best_model_idx, 'Validation R²']:.4f}")
+                            st.success(f"Best (Optimized) ML model's performance on data unseen to it: R² = {results_df.loc[best_model_idx, 'Validation R²']:.4f}")
+
                             # Use the best model for final predictions
                             reg = best_model
                             reg.fit(encoded_train, train[tar])
